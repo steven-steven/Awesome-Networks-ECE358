@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <tuple>
 #include <fstream>
-#include <math.h> 
+#include <cmath>
 
 using namespace std;
 double gerateRandom();
@@ -80,6 +80,7 @@ void nonPersistentSensing(Node &node, double timeAfterTransmission, int &countTr
   }
 }
 
+// All the packets are now sandwitched together at the same time
 void persistentSensing(Node &node, double timeAfterTransmission){
   //loop through this node's queue to update all arrivalTime during the transmission. Simulate POLLING
   int queuePos = 0;
@@ -92,13 +93,13 @@ void persistentSensing(Node &node, double timeAfterTransmission){
 }
 
 //return efficiency
-double csmaSimulation(int nodeCount, double Tsim, double transmissionDelay, double ratePktPerSec){
+double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, double ratePktPerSec){
 
   int countTransmitted = 0;
   int countSuccess = 0;
   
   //initialize nodes
-  Node bus[nodeCount];
+  Node* bus = new Node[nodeCount];
   for(int i = 0; i<nodeCount; i++){
     Node* newNode = new Node();
     double arrivalTime = 0;
@@ -110,20 +111,23 @@ double csmaSimulation(int nodeCount, double Tsim, double transmissionDelay, doub
   }
   
   //run simulation (until Tsim)
+  
+  double senderTime;
   while(true){
-    
-    double senderTime = 0;
-    int senderNode;
-    for(int i = 0; i<nodeCount; i++){
+
+    int senderNode = 0;
+    for(int i = 1; i<nodeCount; i++){
       //for all nodes, select sender (min arrival time)
       //////////////////cout<<"NODE "<<i<<endl;
       //////////////////printQueue(bus[i].queue);
       
-      if(bus[i].queue.front() < senderTime || senderTime == 0){
-        senderTime = bus[i].queue.front();
+      // TODO: 
+      if(bus[i].queue.front() < bus[senderNode].queue.front()){
         senderNode = i;
       }
     }
+    senderTime = bus[senderNode].queue.front();
+
     if(senderTime>=Tsim) break;  //end simulation if earliest arrivalTime goes over Tsim
     
     vector<int> conflictingNodes; 
@@ -135,9 +139,11 @@ double csmaSimulation(int nodeCount, double Tsim, double transmissionDelay, doub
         conflictingNodes.push_back(i);
       }
     }
+    
     if(conflictingNodes.size() > 0){  //there is collision
       //include the sender as a conflicting node
       conflictingNodes.push_back(senderNode);
+	  countTransmitted += conflictingNodes.size();
       
       for(int i = 0; i<conflictingNodes.size(); i++){
         int conflictIndex = conflictingNodes[i];
@@ -148,23 +154,43 @@ double csmaSimulation(int nodeCount, double Tsim, double transmissionDelay, doub
           //drop
           bus[conflictIndex].queue.pop_front();
           bus[conflictIndex].collisionCounter = 0;
-          countTransmitted++;
+        
           continue;
         }
         
         //calculate random wait time
-        int randomNumber = distribution(generator)* (pow(2, bus[conflictIndex].collisionCounter)-1);  //uniforDistr over 0 to 2^i-1
+        int randomNumber = distribution(generator)* (pow( 2, bus[conflictIndex].collisionCounter )-1);  //uniforDistr over 0 to 2^i-1
         double Twaiting = randomNumber*BACKOFF;
         
         //update pkt arrival times to end of random wait time
         int queuePos = 0;
-        double endOfWait = senderTime + Twaiting; //do I add extra waiting time for propagation? (time of collision) -----------------
-        while(bus[conflictIndex].queue.at(queuePos) < endOfWait){
+        // Assumption is that senderTime is time at which collision is detected by all nodes
+        double endOfWait = senderTime + Twaiting;
+        // TODO: will CSMA sensing happen properly ?
+        // Collision is detected 
+        if (bus[conflictIndex].queue.at(queuePos) < endOfWait) {
           bus[conflictIndex].queue.at(queuePos) = endOfWait;
-          queuePos++;
+        }
+        for (queuePos = 1; 
+            queuePos < bus[conflictIndex].queue.size()
+            && bus[conflictIndex].queue.at(queuePos) < transmissionDelay*queuePos + endOfWait; 
+            queuePos++
+          ) 
+        {
+            bus[conflictIndex].queue.at(queuePos) = transmissionDelay*queuePos + endOfWait;
         }
       }
     } else {
+      // TODO: Test
+      // For current node, delay the transmission of any packet that is too close to the one being sent 
+      for ( int i = 1; 
+            (i < bus[senderNode].queue.size()) 
+            && (bus[senderNode].queue.at(i) < (transmissionDelay*i + senderTime) ); 
+            i++
+          ) 
+      {
+        bus[senderNode].queue.at(i) = transmissionDelay*i + senderTime;
+      }
       //no conflict. Sender succeeds. Reset counter of sender.
       countSuccess++;
       countTransmitted++;
@@ -175,7 +201,7 @@ double csmaSimulation(int nodeCount, double Tsim, double transmissionDelay, doub
       //Update arrival times of all nodes depending on sensing strategy
       for(int i = 0; i<nodeCount; i++){
         
-        double timeAfterTransmission = senderTime + (transmissionDelay + PROP_DELAY)*abs(nodeCount-senderNode);
+        double timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(nodeCount-senderNode);
         
         if(PERSISTENT_SENSING){
           // SENSING in persistent
@@ -209,23 +235,23 @@ int main(){
   ofstream myfile;
 	ofstream errorCount;
   myfile.open("one.csv"); 
-	myfile << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
+	myfile << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec)" << endl;
   
   
   //Test Finite Buffer
-  for (double NODE_COUNT = 20; NODE_COUNT <= 100; NODE_COUNT += 20) {
+  for (int NODE_COUNT = 20; NODE_COUNT <= 60; NODE_COUNT += 20) {
     
     double efficiency7 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 7);
     cout<< "efficiency7 "<<efficiency7<<endl;
     double efficiency10 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 10);
     cout<< "efficiency10 "<<efficiency10<<endl;
-    double efficiency20 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 20);
-    cout<< "efficiency20 "<<efficiency20<<endl;
+    //double efficiency20 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 20);
+    //cout<< "efficiency20 "<<efficiency20<<endl;
     
     myfile << NODE_COUNT << ",";
   	myfile << efficiency7 << ",";
-    myfile << efficiency10 << ",";
-    myfile << efficiency20 << endl;
+    myfile << efficiency10 << endl;
+    //myfile << efficiency20 << endl;
   }
    
   myfile.close();
