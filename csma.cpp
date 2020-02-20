@@ -173,11 +173,11 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
         }
         for (queuePos = 1; 
             queuePos < bus[conflictIndex].queue.size()
-            && bus[conflictIndex].queue.at(queuePos) < transmissionDelay*queuePos + endOfWait; 
+            && bus[conflictIndex].queue.at(queuePos) < endOfWait; 
             queuePos++
           ) 
         {
-            bus[conflictIndex].queue.at(queuePos) = transmissionDelay*queuePos + endOfWait;
+            bus[conflictIndex].queue.at(queuePos) = endOfWait;
         }
       }
     } else {
@@ -234,24 +234,24 @@ int main(){
   
   ofstream myfile;
 	ofstream errorCount;
-  myfile.open("one.csv"); 
+  myfile.open("five.csv"); 
 	myfile << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec)" << endl;
   
   
   //Test Finite Buffer
-  for (int NODE_COUNT = 20; NODE_COUNT <= 60; NODE_COUNT += 20) {
+  for (int NODE_COUNT = 20; NODE_COUNT <= 100; NODE_COUNT += 20) {
     
     double efficiency7 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 7);
     cout<< "efficiency7 "<<efficiency7<<endl;
     double efficiency10 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 10);
     cout<< "efficiency10 "<<efficiency10<<endl;
-    //double efficiency20 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 20);
-    //cout<< "efficiency20 "<<efficiency20<<endl;
+    double efficiency20 = csmaSimulation(NODE_COUNT, Tsim, transmissionDelay, 20);
+    cout<< "efficiency20 "<<efficiency20<<endl;
     
     myfile << NODE_COUNT << ",";
   	myfile << efficiency7 << ",";
     myfile << efficiency10 << endl;
-    //myfile << efficiency20 << endl;
+    myfile << efficiency20 << endl;
   }
    
   myfile.close();
