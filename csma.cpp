@@ -83,12 +83,12 @@ void nonPersistentSensing(Node &node, double timeAfterTransmission, int &countTr
 // All the packets are now sandwitched together at the same time
 void persistentSensing(Node &node, double timeAfterTransmission){
   //loop through this node's queue to update all arrivalTime during the transmission. Simulate POLLING
-  int queuePos = 0;
-  while(node.queue.at(queuePos) < timeAfterTransmission){
+  //int queuePos = 0;
+  if (node.queue.at(0) < timeAfterTransmission){
     //update packet arrival to the time after sender finish
     ///////////////cout<<"update to "<<timeAfterTransmission<<endl;
-    node.queue.at(queuePos) = timeAfterTransmission;
-    queuePos++;
+    node.queue.at(0) = timeAfterTransmission;
+    //queuePos++;
   }
 }
 
@@ -163,34 +163,37 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
         double Twaiting = randomNumber*BACKOFF;
         
         //update pkt arrival times to end of random wait time
-        int queuePos = 0;
+        //int queuePos = 0;
         // Assumption is that senderTime is time at which collision is detected by all nodes
         double endOfWait = senderTime + Twaiting;
         // TODO: will CSMA sensing happen properly ?
         // Collision is detected 
-        if (bus[conflictIndex].queue.at(queuePos) < endOfWait) {
-          bus[conflictIndex].queue.at(queuePos) = endOfWait;
+        if (bus[conflictIndex].queue.at(0) < endOfWait) {
+          bus[conflictIndex].queue.at(0) = endOfWait;
         }
-        for (queuePos = 1; 
+        /*for (queuePos = 1; 
             queuePos < bus[conflictIndex].queue.size()
             && bus[conflictIndex].queue.at(queuePos) < endOfWait; 
             queuePos++
           ) 
         {
             bus[conflictIndex].queue.at(queuePos) = endOfWait;
-        }
+        }*/
       }
     } else {
       // TODO: Test
       // For current node, delay the transmission of any packet that is too close to the one being sent 
-      for ( int i = 1; 
+		/*if (bus[senderNode].queue.at(1) < (transmissionDelay + senderTime)) {
+			bus[senderNode].queue.at(1) = transmissionDelay + senderTime;
+		}*/
+      /*for ( int i = 1; 
             (i < bus[senderNode].queue.size()) 
             && (bus[senderNode].queue.at(i) < (transmissionDelay*i + senderTime) ); 
             i++
           ) 
       {
         bus[senderNode].queue.at(i) = transmissionDelay*i + senderTime;
-      }
+      }*/
       //no conflict. Sender succeeds. Reset counter of sender.
       countSuccess++;
       countTransmitted++;
