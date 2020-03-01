@@ -60,32 +60,30 @@ void printQueue(deque<double> q)
  cout<<endl;
 }
 
-void nonPersistentSensing(Node &node, double timeAfterTransmission, int &countTransmitted){
+// TODO/ASSUMPTION: if another packet arrives at the sender node when current sender is sending
+// the exponential backoff will also apply to the sender node
+void nonPersistentSensing(Node &node, const double timeAfterTransmission, int &countTransmitted){
   while(node.queue.front() < timeAfterTransmission){
     node.sensingCounter++;
     
+    // Drop leading packet
     if(node.sensingCounter >= 10){
-      //drop
-      cout<<"DROOOPP"<<endl;
       node.queue.pop_front();
-      node.sensingCounter = 0;
-      countTransmitted++;
-      continue;
+      countTransmitted++; // TODO
     }
-    //update if not drop
+    // Enter exponential backoff and calculate new departure time
     int randomNumber = distribution(generator)* (pow(2, node.sensingCounter)-1);  //uniforDistr over 0 to 2^i-1
     double Twaiting = randomNumber*BACKOFF;
     node.queue.at(0) += Twaiting;
-  }
-  
-  //update other N-1 packets in queue that's < front
-  int queuePos = 1;
-  while(node.queue.at(queuePos) < node.queue.front()){
-    node.queue.at(queuePos) = node.queue.front();
-    queuePos++;
+
+    if (node.sensingCounter >= 10) {
+      node.sensingCounter = 0;
+    }
   }
 }
 
+// OBSERVATION: there is no Interframe Gap
+// If traffic is busy, one node might continually send, starving the rest; this is probably intended
 void persistentSensing(Node &node, double timeAfterTransmission){
   if (node.queue.front() < timeAfterTransmission){
     //update packet arrival to the time after sender finish
@@ -178,7 +176,7 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
     if(conflictingNodes.size() > 0){  //there is collision
       //include the sender as a conflicting node
       conflictingNodes.push_back(senderNode);
-	  countTransmitted += conflictingNodes.size();
+	    countTransmitted += conflictingNodes.size();
       
       for(int i = 0; i<conflictingNodes.size(); i++){
         int conflictIndex = conflictingNodes[i];
@@ -194,16 +192,17 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
         int randomNumber = distribution(generator)* (pow( 2, bus[conflictIndex].collisionCounter )-1);  //uniforDistr over 0 to 2^i-1
         double Twaiting = randomNumber*BACKOFF;
         
-        //update pkt arrival times to end of random wait time
+        // update pkt arrival times to end of random wait time
         // Assumption is that senderTime is time at which collision is detected by all nodes
         double endOfWait = senderTime + Twaiting;
         // Collision is detected 
         if (bus[conflictIndex].queue.front() < endOfWait) {
           bus[conflictIndex].queue.front() = endOfWait;
         }
-		if (bus[conflictIndex].collisionCounter >= 10) {
-			bus[conflictIndex].collisionCounter = 0;
-		}
+        
+        if (bus[conflictIndex].collisionCounter >= 10) {
+          bus[conflictIndex].collisionCounter = 0;
+        }
       }
     } else {
       //no conflict. Sender succeeds. Reset counter of sender.
@@ -252,7 +251,7 @@ int main(){
   
   ofstream myfile;
 	ofstream errorCount;
-  myfile.open("two.csv"); 
+  myfile.open("three.csv"); 
 	myfile << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
   
   
