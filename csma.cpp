@@ -23,6 +23,7 @@ default_random_engine generator(rd());
 //bool PERSISTENT_SENSING = true;
 
 // ORIGINAL PARAMETERS
+double FRAME_LEN = 1500;
 double PROP_DELAY = 0.00000005;
 double TRANSMISSION_SPEED = 1000000;
 double BACKOFF = 512/TRANSMISSION_SPEED; ///constant unit of wait-time = t to transfer 512 bits (used for exp backoff)
@@ -62,14 +63,13 @@ void printQueue(deque<double> q)
 
 // TODO/ASSUMPTION: if another packet arrives at the sender node when current sender is sending
 // the exponential backoff will also apply to the sender node
-void nonPersistentSensing(Node &node, const double timeAfterTransmission, int &countTransmitted){
+void nonPersistentSensing(Node &node, const double timeAfterTransmission){
   while(node.queue.front() < timeAfterTransmission){
     node.sensingCounter++;
     
     // Drop leading packet
     if(node.sensingCounter >= 10){
       node.queue.pop_front();
-      countTransmitted++; // TODO
     }
     // Enter exponential backoff and calculate new departure time
     int randomNumber = distribution(generator)* (pow(2, node.sensingCounter)-1);  //uniforDistr over 0 to 2^i-1
@@ -138,8 +138,8 @@ Node* test1Setup(const int& nodeCount) {
 }
 
 
-//return efficiency
-double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, Node* bus){
+// Run Simulation
+void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, Node* bus, double& efficiency, double& throughput){
 	
   int countTransmitted = 0;
   int countSuccess = 0;
@@ -153,8 +153,7 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
       //for all nodes, select sender (min arrival time)
       //////////////////cout<<"NODE "<<i<<endl;
       //////////////////printQueue(bus[i].queue);
-      
-      // TODO: 
+       
       if(bus[i].queue.front() < bus[senderNode].queue.front()){
         senderNode = i;
       }
@@ -174,13 +173,15 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
     }
     
     if(conflictingNodes.size() > 0){  //there is collision
-      //include the sender as a conflicting node
-      conflictingNodes.push_back(senderNode);
-	    countTransmitted += conflictingNodes.size();
+      // Include all nodes that transmitted a packet as well as the sending node itself
+	    countTransmitted += (conflictingNodes.size() + 1);
       
+      int maxNodeOffset = 0;
       for(int i = 0; i<conflictingNodes.size(); i++){
+        maxNodeOffset = max(maxNodeOffset, abs(conflictIndex-senderNode));
+
         int conflictIndex = conflictingNodes[i];
-        bus[conflictIndex].sensingCounter = 0; // (Non-PERSISTENT CSMA)
+        bus[conflictIndex].sensingCounter = 0;
         
         //for each conflicting node, inc and drop if count = 10
         if(++bus[conflictIndex].collisionCounter >= 10){
@@ -194,7 +195,7 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
         
         // update pkt arrival times to end of random wait time
         // Assumption is that senderTime is time at which collision is detected by all nodes
-        double endOfWait = senderTime + Twaiting;
+        double endOfWait = senderTime + (PROP_DELAY*abs(conflictIndex-senderNode)) + Twaiting;
         // Collision is detected 
         if (bus[conflictIndex].queue.front() < endOfWait) {
           bus[conflictIndex].queue.front() = endOfWait;
@@ -203,6 +204,23 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
         if (bus[conflictIndex].collisionCounter >= 10) {
           bus[conflictIndex].collisionCounter = 0;
         }
+      }
+
+      bus[senderNode].sensingCounter = 0;
+      
+      if(++bus[senderNode].collisionCounter >= 10){
+        //drop
+        bus[senderNode].queue.pop_front();
+      }
+
+      int randomNumber = distribution(generator)* (pow( 2, bus[senderNode].collisionCounter )-1);  //uniforDistr over 0 to 2^i-1
+      double Twaiting = randomNumber*BACKOFF;
+
+      // TODO: Why is this assumption made ?
+      double endOfWait = senderTime + ((maxNodeOffset) * PROP_DELAY) + Twaiting;
+
+      if (bus[senderNode].collisionCounter >= 10) {
+        bus[senderNode].collisionCounter = 0;
       }
     } else {
       //no conflict. Sender succeeds. Reset counter of sender.
@@ -222,56 +240,69 @@ double csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay
           persistentSensing(bus[i], timeAfterTransmission);
         }else{
           // SENSING in non-persistent CSMA/CD
-          nonPersistentSensing(bus[i], timeAfterTransmission, countTransmitted);
+          nonPersistentSensing(bus[i], timeAfterTransmission);
         }
       }
     }
     
   }
   
-  return (double)countSuccess/(double)countTransmitted;
+  efficiency = (double)countSuccess/(double)countTransmitted;
+  throughput = countSuccess * FRAME_LEN / Tsim;
 }
 
 
-double test1Run(const int nodeCount, double Tsim, double transmissionDelay) {
+void test1Run(const int nodeCount, double Tsim, double transmissionDelay, double& efficiency, double& throughput) {
 	Node* bus = test1Setup(nodeCount);
-	return csmaSimulation(nodeCount, Tsim, transmissionDelay, bus);
+	return csmaSimulation(nodeCount, Tsim, transmissionDelay, bus, efficiency, throughput);
 }
 
-double normalRun(const int nodeCount, double Tsim, double transmissionDelay, double ratePktPerSec) {
+void normalRun(const int nodeCount, double Tsim, double transmissionDelay, double ratePktPerSec, double& efficiency, double& throughput) {
 	Node* bus = normalSetup(nodeCount, Tsim, ratePktPerSec);
-	return csmaSimulation(nodeCount, Tsim, transmissionDelay, bus);
+	csmaSimulation(nodeCount, Tsim, transmissionDelay, bus, efficiency, throughput);
 }
 
 
 int main(){
 
   double Tsim = 1000;
-  double transmissionDelay = 1500/TRANSMISSION_SPEED; //L/R
+  double transmissionDelay = FRAME_LEN/TRANSMISSION_SPEED; //L/R
   
-  ofstream myfile;
-	ofstream errorCount;
-  myfile.open("three.csv"); 
-	myfile << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
-  
+  ofstream EfficiencyData;
+  EfficiencyData.open("Efficiency_3.csv"); 
+  ThroughputData.open("Throughput_4.csv"); 
+	EfficiencyData << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
+  ThroughputData << "Number of Nodes, Throughput (7pkt/sec), Throughput (10pkt/sec), Throughput (20pkt/sec)" << endl;
   
   //Test Finite Buffer
+  double efficiency7;
+  double efficiency10;
+  double efficiency20;
+  double throughput7;
+  double throughput10;
+  double throughput20;
   for (int NODE_COUNT = 20; NODE_COUNT <= 100; NODE_COUNT += 20) {
     
-    double efficiency7 = normalRun(NODE_COUNT, Tsim, transmissionDelay, 7);
+    normalRun(NODE_COUNT, Tsim, transmissionDelay, 7, efficiency7, throughput7);
     //cout<< "efficiency7 "<<efficiency7<<endl;
-    double efficiency10 = normalRun(NODE_COUNT, Tsim, transmissionDelay, 10);
+    normalRun(NODE_COUNT, Tsim, transmissionDelay, 10, efficiency10, throughput10);
     //cout<< "efficiency10 "<<efficiency10<<endl;
-    double efficiency20 = normalRun(NODE_COUNT, Tsim, transmissionDelay, 20);
+    normalRun(NODE_COUNT, Tsim, transmissionDelay, 20, efficiency20, throughput20);
     //cout<< "efficiency20 "<<efficiency20<<endl;
     
-    myfile << NODE_COUNT << ",";
-  	myfile << efficiency7 << ",";
-    myfile << efficiency10 << ",";
-    myfile << efficiency20 << endl;
+    EfficiencyData << NODE_COUNT << ",";
+  	EfficiencyData << efficiency7 << ",";
+    EfficiencyData << efficiency10 << ",";
+    EfficiencyData << efficiency20 << endl;
+
+    ThroughputData << NODE_COUNT << ",";
+  	ThroughputData << throughput7 << ",";
+    ThroughputData << throughput10 << ",";
+    ThroughputData << throughput20 << endl;
   }
    
-  myfile.close();
+  EfficiencyData.close();
+  ThroughputData.close();
 
 	// Test
 	//const int NODE_COUNT = 2;
