@@ -61,7 +61,7 @@ void printQueue(deque<double> q)
  cout<<endl;
 }
 
-// TODO/ASSUMPTION: if another packet arrives at the sender node when current sender is sending
+
 // the exponential backoff will also apply to the sender node
 void nonPersistentSensing(Node &node, const double timeAfterTransmission){
   while(node.queue.front() < timeAfterTransmission){
@@ -178,9 +178,9 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
       
       int maxNodeOffset = 0;
       for(int i = 0; i<conflictingNodes.size(); i++){
+        int conflictIndex = conflictingNodes[i];
         maxNodeOffset = max(maxNodeOffset, abs(conflictIndex-senderNode));
 
-        int conflictIndex = conflictingNodes[i];
         bus[conflictIndex].sensingCounter = 0;
         
         //for each conflicting node, inc and drop if count = 10
@@ -194,7 +194,6 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
         double Twaiting = randomNumber*BACKOFF;
         
         // update pkt arrival times to end of random wait time
-        // Assumption is that senderTime is time at which collision is detected by all nodes
         double endOfWait = senderTime + (PROP_DELAY*abs(conflictIndex-senderNode)) + Twaiting;
         // Collision is detected 
         if (bus[conflictIndex].queue.front() < endOfWait) {
@@ -216,8 +215,12 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
       int randomNumber = distribution(generator)* (pow( 2, bus[senderNode].collisionCounter )-1);  //uniforDistr over 0 to 2^i-1
       double Twaiting = randomNumber*BACKOFF;
 
-      // TODO: Why is this assumption made ?
       double endOfWait = senderTime + ((maxNodeOffset) * PROP_DELAY) + Twaiting;
+
+      // Collision is detected 
+      if (bus[senderNode].queue.front() < endOfWait) {
+        bus[senderNode].queue.front() = endOfWait;
+      }
 
       if (bus[senderNode].collisionCounter >= 10) {
         bus[senderNode].collisionCounter = 0;
@@ -231,15 +234,24 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
       bus[senderNode].collisionCounter = 0;
       
       //Update arrival times of all nodes depending on sensing strategy
-      for(int i = 0; i<nodeCount; i++){
-        
-        double timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(nodeCount-senderNode);
-        
-        if(PERSISTENT_SENSING){
+      if(PERSISTENT_SENSING){
+        for(int i = 0; i<nodeCount; i++){
+          
+          double timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(i-senderNode);
           // SENSING in persistent
           persistentSensing(bus[i], timeAfterTransmission);
-        }else{
+        }
+      } else {
+        double timeAfterTransmission;
+        for(int i = 0; i<senderNode; i++){
+          timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(i-senderNode);
           // SENSING in non-persistent CSMA/CD
+          nonPersistentSensing(bus[i], timeAfterTransmission);
+        }
+        timeAfterTransmission = senderTime + transmissionDelay;
+        persistentSensing(bus[senderNode], timeAfterTransmission);
+        for(int i = senderNode+1; i<nodeCount; i++){
+          timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(i-senderNode);
           nonPersistentSensing(bus[i], timeAfterTransmission);
         }
       }
@@ -268,6 +280,7 @@ int main(){
   double Tsim = 1000;
   double transmissionDelay = FRAME_LEN/TRANSMISSION_SPEED; //L/R
   
+  ofstream ThroughputData;
   ofstream EfficiencyData;
   EfficiencyData.open("Efficiency_3.csv"); 
   ThroughputData.open("Throughput_4.csv"); 
