@@ -166,7 +166,7 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
     for(int i = 0; i<nodeCount; i++){
       //check all non-sender nodes if there'll be conflict
       if(i == senderNode) continue;
-      if(bus[i].queue.front() < (senderTime + PROP_DELAY*abs(nodeCount-senderNode))){
+      if(bus[i].queue.front() <= (senderTime + PROP_DELAY*abs(nodeCount-senderNode))){
         //this node will cause conflict (sent)
         conflictingNodes.push_back(i);
       }
@@ -282,8 +282,8 @@ int main(){
   
   ofstream ThroughputData;
   ofstream EfficiencyData;
-  EfficiencyData.open("Efficiency_3.csv"); 
-  ThroughputData.open("Throughput_4.csv"); 
+  EfficiencyData.open("Efficiency_5.csv"); 
+  ThroughputData.open("Throughput_5.csv"); 
 	EfficiencyData << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
   ThroughputData << "Number of Nodes, Throughput (7pkt/sec), Throughput (10pkt/sec), Throughput (20pkt/sec)" << endl;
   
