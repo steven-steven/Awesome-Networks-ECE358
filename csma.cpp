@@ -62,15 +62,21 @@ void printQueue(deque<double> q)
 }
 
 
-// the exponential backoff will also apply to the sender node
+/*
+/  While the packet arrives before transmission is complete, the node will continue to sense the medium and backoff.
+/  Following code simulate this by implementing the backoff multiple times for a particular node until the arrival-time is when medium is free
+/  the exponential backoff will also apply to the sender node
+*/
 void nonPersistentSensing(Node &node, const double timeAfterTransmission){
+  //while the node still needs to wait till the end of transmission.. backoff
   while(node.queue.front() < timeAfterTransmission){
-    node.sensingCounter++;
     
-    // Drop leading packet
+    // Increment and Drop leading packet if > 10
+    node.sensingCounter++;
     if(node.sensingCounter >= 10){
       node.queue.pop_front();
     }
+    
     // Enter exponential backoff and calculate new departure time
     int randomNumber = distribution(generator)* (pow(2, node.sensingCounter)-1);  //uniforDistr over 0 to 2^i-1
     double Twaiting = randomNumber*BACKOFF;
@@ -87,11 +93,14 @@ void nonPersistentSensing(Node &node, const double timeAfterTransmission){
 void persistentSensing(Node &node, double timeAfterTransmission){
   if (node.queue.front() < timeAfterTransmission){
     //update packet arrival to the time after sender finish
-    ///////////////cout<<"update to "<<timeAfterTransmission<<endl;
     node.queue.front() = timeAfterTransmission;
   }
 }
 
+/*
+/  Initialize a shared bus array containing some number of Node objects.
+/  Generate arrival times for each node in the queue
+*/
 Node* normalSetup(const int& nodeCount, const double& Tsim, const double& ratePktPerSec) {
 	Node* bus = new Node[nodeCount];
 	for (int i = 0; i < nodeCount; i++) {
@@ -148,12 +157,9 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
   double senderTime;
   while(true){
 
+    //for all nodes, select next sender (the earliest arrival time form all the nodes' queue)
     int senderNode = 0;
     for(int i = 1; i<nodeCount; i++){
-      //for all nodes, select sender (min arrival time)
-      //////////////////cout<<"NODE "<<i<<endl;
-      //////////////////printQueue(bus[i].queue);
-       
       if(bus[i].queue.front() < bus[senderNode].queue.front()){
         senderNode = i;
       }
@@ -162,31 +168,33 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
 
     if(senderTime>=Tsim) break;  //end simulation if earliest arrivalTime goes over Tsim
     
+    //check all non-sender nodes if there will be conflict
     vector<int> conflictingNodes; 
     for(int i = 0; i<nodeCount; i++){
-      //check all non-sender nodes if there'll be conflict
-      if(i == senderNode) continue;
+      if(i == senderNode) continue;  
       if(bus[i].queue.front() <= (senderTime + PROP_DELAY*abs(nodeCount-senderNode))){
-        //this node will cause conflict (sent)
+        //this node will cause conflict
         conflictingNodes.push_back(i);
       }
     }
     
-    if(conflictingNodes.size() > 0){  //there is collision
-      // Include all nodes that transmitted a packet as well as the sending node itself
+    if(conflictingNodes.size() > 0){  // A COLLISION
+      // Update transmitted-attempt count - include all nodes that transmitted a packet as well as the sending node itself
 	    countTransmitted += (conflictingNodes.size() + 1);
       
+      // iterate collided nodes. Update their counters and update backoff time
       int maxNodeOffset = 0;
       for(int i = 0; i<conflictingNodes.size(); i++){
         int conflictIndex = conflictingNodes[i];
-        maxNodeOffset = max(maxNodeOffset, abs(conflictIndex-senderNode));
+        maxNodeOffset = max(maxNodeOffset, abs(conflictIndex-senderNode));  //furthest node to sender distance
 
-        bus[conflictIndex].sensingCounter = 0;
+        //for non-persistent sensing, reset sensing count
+        if( !PERSISTENT_SENSING )
+          bus[conflictIndex].sensingCounter = 0;
         
-        //for each conflicting node, inc and drop if count = 10
+        //for each conflicting node, inc and drop if collision count = 10
         if(++bus[conflictIndex].collisionCounter >= 10){
-          //drop
-          bus[conflictIndex].queue.pop_front();
+          bus[conflictIndex].queue.pop_front();  //drop
         }
         
         //calculate random wait time
@@ -195,7 +203,6 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
         
         // update pkt arrival times to end of random wait time
         double endOfWait = senderTime + (PROP_DELAY*abs(conflictIndex-senderNode)) + Twaiting;
-        // Collision is detected 
         if (bus[conflictIndex].queue.front() < endOfWait) {
           bus[conflictIndex].queue.front() = endOfWait;
         }
@@ -205,28 +212,26 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
         }
       }
 
-      bus[senderNode].sensingCounter = 0;
+      //for non-persistent sensing, reset sensing count
+      if( !PERSISTENT_SENSING )
+        bus[senderNode].sensingCounter = 0;
       
+      //inc and drop sender node if collision count = 10
       if(++bus[senderNode].collisionCounter >= 10){
-        //drop
         bus[senderNode].queue.pop_front();
       }
 
+      // update pkt arrival times to end of random wait time
       int randomNumber = distribution(generator)* (pow( 2, bus[senderNode].collisionCounter )-1);  //uniforDistr over 0 to 2^i-1
       double Twaiting = randomNumber*BACKOFF;
-
       double endOfWait = senderTime + ((maxNodeOffset) * PROP_DELAY) + Twaiting;
-
-      // Collision is detected 
       if (bus[senderNode].queue.front() < endOfWait) {
         bus[senderNode].queue.front() = endOfWait;
       }
-
-      if (bus[senderNode].collisionCounter >= 10) {
-        bus[senderNode].collisionCounter = 0;
-      }
-    } else {
-      //no conflict. Sender succeeds. Reset counter of sender.
+      
+    } else {  // NO COLLISION. SENDER SUCCEEDS
+    
+      //Update counter and pop sender
       countSuccess++;
       countTransmitted++;
       bus[senderNode].queue.pop_front();
@@ -235,13 +240,17 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
       
       //Update arrival times of all nodes depending on sensing strategy
       if(PERSISTENT_SENSING){
+        // for persistent sensing, all nodes will wait till the end of transmission. Update the arrival time.
         for(int i = 0; i<nodeCount; i++){
           
           double timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(i-senderNode);
           // SENSING in persistent
           persistentSensing(bus[i], timeAfterTransmission);
         }
+        
       } else {
+        //for non-persistent sensing, execute non-persistent sensing (with backoffs) for non-sender node.
+        //if it's a sender node, do persistent sensing (since we popped off the sent node, we want to move the next timestamp forward to present)
         double timeAfterTransmission;
         for(int i = 0; i<senderNode; i++){
           timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(i-senderNode);
@@ -259,6 +268,7 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
     
   }
   
+  //update returned result
   efficiency = (double)countSuccess/(double)countTransmitted;
   throughput = countSuccess * FRAME_LEN / Tsim;
 }
