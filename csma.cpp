@@ -75,6 +75,7 @@ void nonPersistentSensing(Node &node, const double timeAfterTransmission){
     node.sensingCounter++;
     if(node.sensingCounter >= 10){
       node.queue.pop_front();
+      node.sensingCounter = 0;
     }
     
     // Enter exponential backoff and calculate new departure time
@@ -82,9 +83,6 @@ void nonPersistentSensing(Node &node, const double timeAfterTransmission){
     double Twaiting = randomNumber*BACKOFF;
     node.queue.at(0) += Twaiting;
 
-    if (node.sensingCounter >= 10) {
-      node.sensingCounter = 0;
-    }
   }
 }
 
@@ -253,7 +251,6 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
         double timeAfterTransmission;
         for(int i = 0; i<senderNode; i++){
           timeAfterTransmission = senderTime + (transmissionDelay) + PROP_DELAY*abs(i-senderNode);
-          // SENSING in non-persistent CSMA/CD
           nonPersistentSensing(bus[i], timeAfterTransmission);
         }
         timeAfterTransmission = senderTime + transmissionDelay;
