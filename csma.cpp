@@ -195,6 +195,7 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
         //for each conflicting node, inc and drop if collision count = 10
         if(++bus[conflictIndex].collisionCounter >= 10){
           bus[conflictIndex].queue.pop_front();  //drop
+          bus[conflictIndex].collisionCounter = 0;
         }
         
         //calculate random wait time
@@ -206,10 +207,7 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
         if (bus[conflictIndex].queue.front() < endOfWait) {
           bus[conflictIndex].queue.front() = endOfWait;
         }
-        
-        if (bus[conflictIndex].collisionCounter >= 10) {
-          bus[conflictIndex].collisionCounter = 0;
-        }
+
       }
 
       //for non-persistent sensing, reset sensing count
@@ -219,6 +217,7 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
       //inc and drop sender node if collision count = 10
       if(++bus[senderNode].collisionCounter >= 10){
         bus[senderNode].queue.pop_front();
+        bus[senderNode].collisionCounter = 0;
       }
 
       // update pkt arrival times to end of random wait time
