@@ -15,25 +15,17 @@ std::random_device rd;
 uniform_real_distribution<double> distribution(0.0,1.0);
 default_random_engine generator(rd());
 
-
-// TEST PARAMETERS
-//double PROP_DELAY = 0;
-//double TRANSMISSION_SPEED = 1000000;
-//double BACKOFF = 512/TRANSMISSION_SPEED; ///constant unit of wait-time = t to transfer 512 bits (used for exp backoff)
-//bool PERSISTENT_SENSING = true;
-
 // ORIGINAL PARAMETERS
 double FRAME_LEN = 1500;
 double PROP_DELAY = 0.00000005;
 double TRANSMISSION_SPEED = 1000000;
 double BACKOFF = 512/TRANSMISSION_SPEED; ///constant unit of wait-time = t to transfer 512 bits (used for exp backoff)
-bool PERSISTENT_SENSING = true;
+bool PERSISTENT_SENSING = false;
 
 /*
   Generate eponential distribution
 */
 double generateRandom(double mean){
-  
   double uniformRandomVar = distribution(generator);
   //expRandomVar 
   return -(1/mean)*log(1-uniformRandomVar);
@@ -44,23 +36,6 @@ struct Node {
   int collisionCounter = 0;
   int sensingCounter = 0;  //count number of times this node failed to sense medium (non-persistent CSMA/CD)
 };
-
-/*
-  Print queue
-*/
-void printQueue(deque<double> q)
-{
-  cout<<"size " << q.size()<<endl;
-	//printing content of queue 
-	while (!q.empty()){
-   cout<<" "<<q.front();
-		q.pop_front();
-	}
-	cout<<endl;
- cout<<endl;
- cout<<endl;
-}
-
 
 /*
 /  While the packet arrives before transmission is complete, the node will continue to sense the medium and backoff.
@@ -112,38 +87,6 @@ Node* normalSetup(const int& nodeCount, const double& Tsim, const double& ratePk
 	}
 	return bus;
 }
-
-Node* test1Setup(const int& nodeCount) {
-
-	Node* bus = new Node[nodeCount];
-	bus[0].queue.push_back(5);
-	bus[0].queue.push_back(6);
-	bus[0].queue.push_back(7);
-	bus[0].queue.push_back(8);
-
-
-
-	bus[0].queue.push_back(60);
-	bus[0].queue.push_back(80);
-	bus[0].queue.push_back(88);
-	bus[0].queue.push_back(89);
-	bus[0].queue.push_back(99);
-	bus[0].queue.push_back(100);
-
-
-	bus[1].queue.push_back(6);
-	bus[1].queue.push_back(14);
-
-	bus[1].queue.push_back(16);
-	bus[1].queue.push_back(18);
-	bus[1].queue.push_back(27);
-	bus[1].queue.push_back(30);
-	bus[1].queue.push_back(66);
-	bus[1].queue.push_back(68);
-	
-	return bus;
-}
-
 
 // Run Simulation
 void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, Node* bus, double& efficiency, double& throughput){
@@ -269,15 +212,9 @@ void csmaSimulation(const int nodeCount, double Tsim, double transmissionDelay, 
   throughput = countSuccess * FRAME_LEN / Tsim;
 }
 
-
-void test1Run(const int nodeCount, double Tsim, double transmissionDelay, double& efficiency, double& throughput) {
-	Node* bus = test1Setup(nodeCount);
-	return csmaSimulation(nodeCount, Tsim, transmissionDelay, bus, efficiency, throughput);
-}
-
 void normalRun(const int nodeCount, double Tsim, double transmissionDelay, double ratePktPerSec, double& efficiency, double& throughput) {
-	Node* bus = normalSetup(nodeCount, Tsim, ratePktPerSec);
-	csmaSimulation(nodeCount, Tsim, transmissionDelay, bus, efficiency, throughput);
+	Node* bus = normalSetup(nodeCount, Tsim, ratePktPerSec);  //initialize bus with nodes
+	csmaSimulation(nodeCount, Tsim, transmissionDelay, bus, efficiency, throughput);  //run simulation
 }
 
 
@@ -288,12 +225,17 @@ int main(){
   
   ofstream ThroughputData;
   ofstream EfficiencyData;
-  EfficiencyData.open("Efficiency_5.csv"); 
-  ThroughputData.open("Throughput_5.csv"); 
+  ofstream ThroughputData_nonPer;
+  ofstream EfficiencyData_nonPer;
+  EfficiencyData.open("Efficiency_persistent.csv"); 
+  ThroughputData.open("Throughput_persistent.csv"); 
+  EfficiencyData_nonPer.open("Efficiency_nonPersistent.csv"); 
+  ThroughputData_nonPer.open("Throughput_nonPersistent.csv"); 
 	EfficiencyData << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
   ThroughputData << "Number of Nodes, Throughput (7pkt/sec), Throughput (10pkt/sec), Throughput (20pkt/sec)" << endl;
+  EfficiencyData_nonPer << "Number of Nodes, Efficiency (7pkt/sec), Efficiency (10pkt/sec), Efficiency (20pkt/sec)" << endl;
+  ThroughputData_nonPer << "Number of Nodes, Throughput (7pkt/sec), Throughput (10pkt/sec), Throughput (20pkt/sec)" << endl;
   
-  //Test Finite Buffer
   double efficiency7;
   double efficiency10;
   double efficiency20;
@@ -302,33 +244,38 @@ int main(){
   double throughput20;
   for (int NODE_COUNT = 20; NODE_COUNT <= 100; NODE_COUNT += 20) {
     
+    PERSISTENT_SENSING = true;
     normalRun(NODE_COUNT, Tsim, transmissionDelay, 7, efficiency7, throughput7);
-    //cout<< "efficiency7 "<<efficiency7<<endl;
     normalRun(NODE_COUNT, Tsim, transmissionDelay, 10, efficiency10, throughput10);
-    //cout<< "efficiency10 "<<efficiency10<<endl;
     normalRun(NODE_COUNT, Tsim, transmissionDelay, 20, efficiency20, throughput20);
-    //cout<< "efficiency20 "<<efficiency20<<endl;
     
     EfficiencyData << NODE_COUNT << ",";
   	EfficiencyData << efficiency7 << ",";
     EfficiencyData << efficiency10 << ",";
     EfficiencyData << efficiency20 << endl;
-
     ThroughputData << NODE_COUNT << ",";
   	ThroughputData << throughput7 << ",";
     ThroughputData << throughput10 << ",";
     ThroughputData << throughput20 << endl;
+
+    PERSISTENT_SENSING = false;
+    normalRun(NODE_COUNT, Tsim, transmissionDelay, 7, efficiency7, throughput7);
+    normalRun(NODE_COUNT, Tsim, transmissionDelay, 10, efficiency10, throughput10);
+    normalRun(NODE_COUNT, Tsim, transmissionDelay, 20, efficiency20, throughput20);
+    
+    EfficiencyData_nonPer << NODE_COUNT << ",";
+  	EfficiencyData_nonPer << efficiency7 << ",";
+    EfficiencyData_nonPer << efficiency10 << ",";
+    EfficiencyData_nonPer << efficiency20 << endl;
+    ThroughputData_nonPer << NODE_COUNT << ",";
+  	ThroughputData_nonPer << throughput7 << ",";
+    ThroughputData_nonPer << throughput10 << ",";
+    ThroughputData_nonPer << throughput20 << endl;
   }
    
   EfficiencyData.close();
   ThroughputData.close();
-
-	// Test
-	//const int NODE_COUNT = 2;
-	//double Tsim = 400;
-	//double transmissionDelay = 1500 / TRANSMISSION_SPEED; //L/R
-
-	//test1Run(NODE_COUNT, Tsim, 7);
-
+  EfficiencyData_nonPer.close();
+  ThroughputData_nonPer.close();
   return 0;
 }
